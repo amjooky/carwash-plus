@@ -31,6 +31,9 @@ export class PaymentsController {
         }
         // We need the raw body for signature verification
         const rawBody = req.rawBody;
+        if (!rawBody) {
+            throw new Error('Raw body is missing');
+        }
         return this.paymentsService.handleWebhook(signature, rawBody);
     }
 
