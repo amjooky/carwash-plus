@@ -20,7 +20,8 @@ export class PaymentsService {
       throw new Error('STRIPE_SECRET_KEY is required');
     }
     this.stripe = new Stripe(stripeSecretKey, {
-      apiVersion: '2023-10-16', // Use a stable supported version
+      // Locking the apiVersion to bypass TS errors with the specialized stripe package
+      apiVersion: '2024-12-18.acacia' as any,
     });
   }
 
