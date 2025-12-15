@@ -20,7 +20,7 @@ export class PaymentsService {
       throw new Error('STRIPE_SECRET_KEY is required');
     }
     this.stripe = new Stripe(stripeSecretKey, {
-      apiVersion: '2024-12-18.acacia',
+      apiVersion: '2023-10-16', // Use a stable supported version
     });
   }
 
@@ -30,7 +30,11 @@ export class PaymentsService {
     // Verify booking exists and get amount if not provided
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { service: true },
+      include: {
+        services: {
+          include: { service: true }
+        }
+      },
     });
 
     if (!booking) {
@@ -38,7 +42,7 @@ export class PaymentsService {
     }
 
     // Use booking amount if not provided in DTO
-    const paymentAmount = amount || booking.amount;
+    const paymentAmount = amount || booking.finalAmount;
 
     if (paymentAmount <= 0) {
       throw new BadRequestException('Payment amount must be greater than zero');
@@ -53,18 +57,19 @@ export class PaymentsService {
         metadata: {
           bookingId,
           customerId: booking.customerId,
-          serviceId: booking.serviceId,
+          // Use the first service name or ID as strict metadata if available
+          serviceInfo: booking.services.length > 0 ? booking.services[0].service.name : 'Multiple Services',
         },
       });
 
       // Create payment record in database
+      // Note: Payment model does NOT have currency or metadata fields
       const payment = await this.prisma.payment.create({
         data: {
           bookingId,
           amount: paymentAmount,
-          currency: currency.toUpperCase(),
+          method: 'CARD', // Enum PaymentMethod.CARD
           status: PaymentStatus.PENDING,
-          paymentMethod: 'card',
           transactionId: paymentIntent.id,
         },
       });
@@ -91,7 +96,7 @@ export class PaymentsService {
         where: { transactionId: paymentIntentId },
         data: {
           status: this.mapStripeStatusToPaymentStatus(paymentIntent.status),
-          metadata: paymentIntent.metadata as any,
+          // Metadata and currency are not stored in our simple Payment model
         },
         include: {
           booking: true,
@@ -160,7 +165,7 @@ export class PaymentsService {
       include: {
         booking: {
           include: {
-            service: true,
+            services: { include: { service: true } },
             customer: true,
           },
         },
@@ -187,7 +192,7 @@ export class PaymentsService {
         include: {
           booking: {
             include: {
-              service: true,
+              services: { include: { service: true } },
             },
           },
         },
@@ -227,6 +232,10 @@ export class PaymentsService {
 
     if (payment.status !== PaymentStatus.PAID) {
       throw new BadRequestException('Only paid payments can be refunded');
+    }
+
+    if (!payment.transactionId) {
+      throw new BadRequestException('Payment does not have a transaction ID');
     }
 
     try {
