@@ -1,0 +1,741 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+  DEBUG
+}
+
+enum LogAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  ACCESS
+  SYSTEM
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIAL
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE
+  ONLINE
+}
+
+enum StaffRole {
+  WASHER
+  SUPERVISOR
+  MANAGER
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ServiceType {
+  BASIC_WASH
+  PREMIUM_WASH
+  DELUXE_WASH
+  INTERIOR_CLEAN
+  WAX_POLISH
+  DETAILING
+  CUSTOM
+}
+
+enum VehicleType {
+  SEDAN
+  SUV
+  TRUCK
+  VAN
+  MOTORCYCLE
+  BUS
+}
+
+enum BadgeType {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+enum NotificationType {
+  PROMOTIONAL
+  BOOKING_STATUS
+  BOOKING_CONFIRMATION
+  BOOKING_REMINDER
+  BOOKING_COMPLETED
+  PAYMENT_RECEIVED
+  LOYALTY_EARNED
+  PROMOTION
+  SYSTEM
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  phone     String?
+  avatar    String?
+  role      UserRole @default(USER)
+  status    UserStatus @default(ACTIVE)
+  fcmToken  String?  // Firebase Cloud Messaging token for push notifications
+  
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // Relations
+  sessions     Session[]
+  logs         Log[]
+  permissions  UserPermission[]
+  createdUsers User[]   @relation("CreatedBy")
+  createdBy    User?    @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById  String?
+  
+  analytics    Analytics[]
+  ownedCenter  Center?   @relation("CenterOwner")
+  notifications Notification[]
+  
+  @@index([email])
+  @@index([username])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  module      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  users       UserPermission[]
+  rolePermissions RolePermission[]
+  
+  @@index([code])
+  @@index([module])
+  @@map("permissions")
+}
+
+model UserPermission {
+  id           String   @id @default(uuid())
+  userId       String
+  permissionId String
+  grantedAt    DateTime @default(now())
+  grantedBy    String?
+  
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@index([permissionId])
+  @@map("user_permissions")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  permissions RolePermission[]
+  
+  @@index([code])
+  @@map("roles")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String
+  permissionId String
+  
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model Log {
+  id        String    @id @default(uuid())
+  userId    String?
+  level     LogLevel  @default(INFO)
+  action    LogAction
+  module    String
+  message   String
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([level])
+  @@index([action])
+  @@index([module])
+  @@index([createdAt])
+  @@map("logs")
+}
+
+model Setting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  category    String
+  description String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([category])
+  @@index([key])
+  @@map("settings")
+}
+
+model Analytics {
+  id        String   @id @default(uuid())
+  userId    String?
+  event     String
+  category  String
+  data      Json?
+  timestamp DateTime @default(now())
+  
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([event])
+  @@index([category])
+  @@index([timestamp])
+  @@map("analytics")
+}
+
+// Car Wash Management Models
+
+model Center {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  address     String
+  city        String
+  state       String
+  zipCode     String
+  phone       String
+  email       String
+  
+  openTime         String   // e.g., "08:00"
+  closeTime        String   // e.g., "20:00"
+  capacity         Int      @default(5) // concurrent bookings
+  timeSlotInterval Int      @default(30) // minutes: 15, 30, or 60
+  
+  latitude    Float?
+  longitude   Float?
+  amenities   String[] // ["WiFi", "Waiting Area", "Coffee"]
+  images      String[] @default([]) // Array of image URLs
+  
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  services    Service[]
+  bookings    Booking[]
+  staff       Staff[]
+  owner       User?    @relation("CenterOwner", fields: [ownerId], references: [id])
+  ownerId     String?  @unique
+  
+  @@index([city])
+  @@index([isActive])
+  @@map("centers")
+}
+
+model Customer {
+  id             String   @id @default(uuid())
+  userId         String?  @unique
+  firstName      String
+  lastName       String
+  email          String   @unique
+  phone          String
+  
+  loyaltyPoints  Int      @default(0)
+  totalSpent     Float    @default(0)
+  totalBookings  Int      @default(0)
+  
+  vehicles       Vehicle[]
+  bookings       Booking[]
+  reviews        Review[]
+  loyaltyHistory LoyaltyHistory[]
+  badges         CustomerBadge[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@index([email])
+  @@index([phone])
+  @@index([loyaltyPoints])
+  @@map("customers")
+}
+
+model Vehicle {
+  id           String      @id @default(uuid())
+  customerId   String
+  
+  make         String      // Toyota, Honda 
+  model        String      // Camry, Civic
+  year         Int
+  trim         String?     // EX, LX, Sport, etc.
+  color        String
+  licensePlate String      @unique
+  type         VehicleType @default(SEDAN)
+  imageUrl     String?     // Car image from API
+  
+  notes        String?     // Special instructions
+  
+  customer     Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  bookings     Booking[]
+  
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  @@index([customerId])
+  @@index([licensePlate])
+  @@map("vehicles")
+}
+
+model Service {
+  id              String      @id @default(uuid())
+  centerId        String
+  
+  name            String
+  description     String?
+  type            ServiceType @default(BASIC_WASH)
+  durationMinutes Int      @default(60) // NEW: duration in minutes
+
+  baseDuration    Int         // minutes
+  
+  isActive        Boolean     @default(true)
+  
+  center          Center      @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  pricing         ServicePricing[]
+  bookingServices BookingService[]
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([centerId])
+  @@index([type])
+  @@index([isActive])
+  @@map("services")
+}
+
+model ServicePricing {
+  id          String      @id @default(uuid())
+  serviceId   String
+  vehicleType VehicleType
+  
+  basePrice   Float
+  discount    Float       @default(0) // percentage
+  
+  validFrom   DateTime    @default(now())
+  validUntil  DateTime?
+  
+  isActive    Boolean     @default(true)
+  
+  service     Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@unique([serviceId, vehicleType, validFrom])
+  @@index([serviceId])
+  @@index([vehicleType])
+  @@map("service_pricing")
+}
+
+model Booking {
+  id                String         @id @default(uuid())
+  centerId          String
+  customerId        String
+  vehicleId         String
+  
+  bookingNumber     String         @unique // BK-20231121-0001
+  
+  scheduledDate     DateTime
+  scheduledTime     String         // "14:00"
+  estimatedDuration Int            // minutes
+  bayNumber         Int?           // Bay number (1 to center.capacity)
+  
+  status            BookingStatus  @default(PENDING)
+  
+  actualStartTime   DateTime?
+  actualEndTime     DateTime?
+  
+  totalAmount       Float
+  discount          Float          @default(0)
+  finalAmount       Float
+  
+  paymentStatus     PaymentStatus  @default(PENDING)
+  paymentMethod     PaymentMethod?
+  
+  notes             String?
+  cancelReason      String?
+  
+  // Recurring booking info
+  isRecurring       Boolean        @default(false)
+  recurringPattern  String?        // "WEEKLY", "MONTHLY"
+  recurringEndDate  DateTime?
+  parentBookingId   String?        // Link to parent recurring booking
+  
+  // Template
+  templateId        String?
+  
+  center            Center         @relation(fields: [centerId], references: [id])
+  customer          Customer       @relation(fields: [customerId], references: [id])
+  vehicle           Vehicle        @relation(fields: [vehicleId], references: [id])
+  services          BookingService[]
+  assignments       BookingAssignment[]
+  payments          Payment[]
+  template          BookingTemplate? @relation(fields: [templateId], references: [id])
+  notifications     Notification[]
+  
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  @@index([centerId])
+  @@index([customerId])
+  @@index([vehicleId])
+  @@index([scheduledDate])
+  @@index([status])
+  @@index([bookingNumber])
+  @@index([centerId, scheduledDate, scheduledTime, bayNumber])
+  @@map("bookings")
+}
+
+model BookingService {
+  id        String  @id @default(uuid())
+  bookingId String
+  serviceId String
+  
+  price     Float
+  duration  Int     // minutes
+  
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  service   Service @relation(fields: [serviceId], references: [id])
+  
+  @@unique([bookingId, serviceId])
+  @@index([bookingId])
+  @@index([serviceId])
+  @@map("booking_services")
+}
+
+model BookingTemplate {
+  id          String   @id @default(uuid())
+  customerId  String
+  
+  name        String   // "My Weekly Wash"
+  description String?
+  
+  serviceIds  String[] // Array of service IDs
+  vehicleType VehicleType
+  notes       String?
+  
+  bookings    Booking[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([customerId])
+  @@map("booking_templates")
+}
+
+model Waitlist {
+  id             String      @id @default(uuid())
+  centerId       String
+  customerId     String
+  
+  preferredDate  DateTime
+  preferredTime  String      // "14:00"
+  vehicleType    VehicleType
+  serviceIds     String[]    // Array of service IDs
+  
+  notified       Boolean     @default(false)
+  notifiedAt     DateTime?
+  
+  expired        Boolean     @default(false)
+  expiresAt      DateTime
+  
+  createdAt      DateTime    @default(now())
+  
+  @@index([centerId])
+  @@index([customerId])
+  @@index([preferredDate])
+  @@index([expired])
+  @@map("waitlist")
+}
+
+model Staff {
+  id           String      @id @default(uuid())
+  centerId     String
+  
+  firstName    String
+  lastName     String
+  email        String      @unique
+  phone        String
+  
+  role         StaffRole   @default(WASHER)
+  
+  hourlyRate   Float
+  
+  // Gamification
+  rating       Float       @default(5.0)
+  totalJobs    Int         @default(0)
+  completedJobs Int        @default(0)
+  
+  isActive     Boolean     @default(true)
+  
+  center       Center      @relation(fields: [centerId], references: [id])
+  shifts       Shift[]
+  assignments  BookingAssignment[]
+  badges       StaffBadge[]
+  
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  @@index([centerId])
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@map("staff")
+}
+
+model Shift {
+  id        String      @id @default(uuid())
+  staffId   String
+  
+  date      DateTime
+  startTime String      // "08:00"
+  endTime   String      // "16:00"
+  
+  status    ShiftStatus @default(SCHEDULED)
+  
+  notes     String?
+  
+  staff     Staff       @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  
+  @@index([staffId])
+  @@index([date])
+  @@index([status])
+  @@map("shifts")
+}
+
+model BookingAssignment {
+  id        String   @id @default(uuid())
+  bookingId String
+  staffId   String
+  
+  assignedAt DateTime @default(now())
+  
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  staff      Staff    @relation(fields: [staffId], references: [id])
+  
+  @@unique([bookingId, staffId])
+  @@index([bookingId])
+  @@index([staffId])
+  @@map("booking_assignments")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  bookingId     String
+  
+  amount        Float
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  
+  transactionId String?       @unique
+  
+  paidAt        DateTime?
+  
+  notes         String?
+  
+  booking       Booking       @relation(fields: [bookingId], references: [id])
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@index([bookingId])
+  @@index([status])
+  @@index([transactionId])
+  @@map("payments")
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  customerId String
+  bookingId  String   @unique
+  
+  rating     Int      // 1-5
+  comment    String?
+  
+  customer   Customer @relation(fields: [customerId], references: [id])
+  
+  createdAt  DateTime @default(now())
+  
+  @@index([customerId])
+  @@index([rating])
+  @@map("reviews")
+}
+
+model LoyaltyHistory {
+  id          String   @id @default(uuid())
+  customerId  String
+  
+  points      Int      // Can be negative for redemptions
+  reason      String   // "Booking completed", "Points redeemed"
+  description String?
+  
+  bookingId   String?
+  
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("loyalty_history")
+}
+
+model CustomerBadge {
+  id         String    @id @default(uuid())
+  customerId String
+  
+  type       BadgeType
+  name       String    // "Loyal Customer", "100 Washes"
+  description String?
+  icon       String?   // URL or icon name
+  
+  earnedAt   DateTime  @default(now())
+  
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  @@index([customerId])
+  @@index([type])
+  @@map("customer_badges")
+}
+
+model StaffBadge {
+  id          String    @id @default(uuid())
+  staffId     String
+  
+  type        BadgeType
+  name        String    // "Top Performer", "500 Jobs"
+  description String?
+  icon        String?
+  
+  earnedAt    DateTime  @default(now())
+  
+  staff       Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  
+  @@index([staffId])
+  @@index([type])
+  @@map("staff_badges")
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type       NotificationType
+  title      String
+  message    String
+  
+  data       Json?            // Additional data (e.g., bookingId)
+  
+  isRead     Boolean          @default(false)
+  readAt     DateTime?
+  
+  bookingId  String?          // Optional link to booking
+  booking    Booking?         @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([type])
+  @@index([createdAt])
+  @@map("notifications")
+}
