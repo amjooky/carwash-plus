@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "940227982388",
+    "project_id": "lavage-a1d72",
+    "storage_bucket": "lavage-a1d72.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:940227982388:android:32183864a66d4380698661",
+        "android_client_info": {
+          "package_name": "com.example.mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD1awfC4CehVLa0I3EHA2Ie7KkOtFxMfGk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
